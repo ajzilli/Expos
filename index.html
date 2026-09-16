@@ -305,12 +305,12 @@
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyAferkmnJY0y27eS66cPPUw8HSpK4w8G3Y",
-      authDomain: "rockies-2fe2c.firebaseapp.com",
-      databaseURL: "https://rockies-2fe2c-default-rtdb.firebaseio.com",
-      projectId: "rockies-2fe2c",
-      storageBucket: "rockies-2fe2c.firebasestorage.app",
-      messagingSenderId: "251399851750",
-      appId: "1:251399851750:web:b754bb5867a4e1b56eb527"
+      authDomain: "rockies-2fe2c.firebaseapp.com",
+      databaseURL: "https://rockies-2fe2c-default-rtdb.firebaseio.com",
+      projectId: "rockies-2fe2c",
+      storageBucket: "rockies-2fe2c.firebasestorage.app",
+      messagingSenderId: "251399851750",
+      appId: "1:251399851750:web:b754bb5867a4e1b56eb527"
     };
 
     // Initialize Firebase
@@ -323,7 +323,7 @@
       console.warn("Firebase not yet configured. Running in offline mode.");
     }
 
-    // Default Roster
+    // Default Roster (9 players)
     let roster = ["Beckett", "Cash", "Jack B", "Max", "Dean", "Arlo", "Jack N", "William", "Zachary"];
     let absentList = [];
     let teamName = "Fall Ball 2026";
@@ -331,6 +331,7 @@
     let currentInning = 1;
     let teamCode = localStorage.getItem("ball_team_code") || "FALL26";
 
+    // 9 Standard Positions (6 Infield, 3 Outfield)
     const POSITIONS = [
       { key: "P", label: "Pitcher", type: "IF" },
       { key: "C", label: "Catcher", type: "IF" },
@@ -339,8 +340,7 @@
       { key: "3B", label: "3rd Base", type: "IF" },
       { key: "SS", label: "Shortstop", type: "IF" },
       { key: "LF", label: "Left Field", type: "OF" },
-      { key: "LC", label: "Left Center", type: "OF" },
-      { key: "RC", label: "Right Center", type: "OF" },
+      { key: "CF", label: "Center Field", type: "OF" },
       { key: "RF", label: "Right Field", type: "OF" }
     ];
 
@@ -388,17 +388,36 @@
         const statusText = document.getElementById("syncText");
 
         if (data) {
-          roster = data.roster || roster;
-          absentList = data.absentList || [];
+          let remoteRoster = data.roster || roster;
+          remoteRoster = remoteRoster.filter(p => p !== "Ashton");
+
+          let remoteAbsent = (data.absentList || []).filter(p => p !== "Ashton");
+
+          roster = remoteRoster;
+          absentList = remoteAbsent;
           teamName = data.teamName || teamName;
-          lastOutPlayer = data.lastOutPlayer || null;
+          lastOutPlayer = (data.lastOutPlayer === "Ashton") ? null : (data.lastOutPlayer || null);
           currentInning = data.currentInning || 1;
-          rotationState = data.rotationState || rotationState;
+
+          // Clean up any obsolete LC/RC keys or Ashton references from remote
+          let remoteGrid = data.rotationState || rotationState;
+          for (let i = 0; i < INNINGS; i++) {
+            if (!remoteGrid[i]) remoteGrid[i] = {};
+            POSITIONS.forEach(p => {
+              if (!remoteGrid[i][p.key]) {
+                remoteGrid[i][p.key] = { player: "", manual: false };
+              } else if (remoteGrid[i][p.key].player === "Ashton") {
+                remoteGrid[i][p.key] = { player: "", manual: false };
+              }
+            });
+            delete remoteGrid[i]["LC"];
+            delete remoteGrid[i]["RC"];
+          }
+          rotationState = remoteGrid;
 
           document.getElementById("appTitle").innerText = teamName;
           document.getElementById("currentInningIndicator").innerText = "Inning " + currentInning;
         } else {
-          // If room doesn't exist yet, push our current local state
           pushCloudUpdate();
         }
 
@@ -675,8 +694,9 @@
       let solved = false, best = null;
 
       let activeField = [...POSITIONS];
-      if (roster.length < 10) {
-        activeField = POSITIONS.filter(p => !["RF", "LF", "RC", "LC"].slice(0, 10 - roster.length).includes(p.key));
+      if (roster.length < 9) {
+        // If 7 or 8 players, drop outfield spots starting with RF, then LF
+        activeField = POSITIONS.filter(p => !["RF", "LF"].slice(0, 9 - roster.length).includes(p.key));
       }
 
       for (let attempt = 0; attempt < 800; attempt++) {
