@@ -121,6 +121,18 @@
       font-size: 0.85rem;
     }
     .manual-set { background: #dbeafe; font-weight: 700; border-color: #2563eb; }
+    
+    tr.pos-disabled td {
+      background: #f1f5f9 !important;
+      color: #94a3b8 !important;
+    }
+    tr.pos-disabled select {
+      background: #e2e8f0 !important;
+      border-color: #cbd5e1 !important;
+      color: #94a3b8 !important;
+      cursor: not-allowed;
+    }
+
     th.current-inning-col { background: #2563eb !important; color: #ffffff !important; }
     td.current-inning-col {
       background: var(--highlight-bg);
@@ -196,12 +208,97 @@
       width: 100%;
       padding: 1.5rem;
     }
+
+    @page {
+      size: letter landscape;
+      margin: 0.35in;
+    }
     @media print {
-      body { background: white; padding: 0; }
-      button, .no-print, .move-btn, .remove-btn, .add-back-btn, .last-out-btn, .modal-overlay, .sync-status { display: none !important; }
-      .card { box-shadow: none; border: 1px solid #000; margin-bottom: 1rem; page-break-inside: avoid; }
-      th, td { border: 1px solid #000; padding: 4px; }
-      select { border: none; appearance: none; -webkit-appearance: none; font-weight: bold; }
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 8pt !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      header {
+        margin-bottom: 0.5rem !important;
+        padding-bottom: 0.25rem !important;
+        border-bottom: 1.5px solid #000 !important;
+      }
+      h1 { font-size: 1.2rem !important; color: #000 !important; }
+      small { color: #444 !important; }
+      
+      button, .no-print, .move-btn, .remove-btn, .add-back-btn, .last-out-btn, .modal-overlay, .sync-status {
+        display: none !important;
+      }
+
+      .card {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin-bottom: 0.75rem !important;
+        page-break-inside: avoid;
+      }
+      .table-container {
+        overflow: visible !important;
+        width: 100% !important;
+      }
+      table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+      }
+      th, td {
+        border: 1px solid #333 !important;
+        padding: 4px 2px !important;
+        font-size: 7.5pt !important;
+        text-align: center !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+      }
+      th {
+        background: #f1f5f9 !important;
+        color: #000 !important;
+      }
+      .pos-label {
+        width: 15% !important;
+        text-align: left !important;
+        font-weight: bold !important;
+        padding-left: 6px !important;
+      }
+      .pos-type-tag {
+        border: 0.5px solid #666;
+        padding: 1px 3px;
+        font-size: 6.5pt;
+      }
+
+      select {
+        border: none !important;
+        background: transparent !important;
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        -moz-appearance: none !important;
+        font-size: 7.5pt !important;
+        font-weight: 600 !important;
+        text-align-last: center !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      th.current-inning-col {
+        background: #e2e8f0 !important;
+        color: #000000 !important;
+      }
+      td.current-inning-col {
+        background: none !important;
+        border: 1px solid #333 !important;
+      }
     }
   </style>
 </head>
@@ -223,7 +320,7 @@
       <button onclick="autoFillRemaining()">Auto-Fill Open</button>
       <button class="secondary" onclick="resetToManual()">Clear Unlocked</button>
       <button class="danger" onclick="resetAll()">Reset All</button>
-      <button onclick="window.print()">Print</button>
+      <button onclick="window.print()">Print Lineup Sheet</button>
     </div>
   </header>
 
@@ -324,14 +421,14 @@
     }
 
     // Default Roster (9 players)
-    let roster = ["Beckett", "Cash", "Jack B", "Max", "Dean", "Arlo", "Jack N", "William", "Zachary"];
+    let roster = ["Lochlan", "Xander", "Hill", "Preston", "Connor", "William", "Hank", "Graham", "Beckham", "Hudson"];
     let absentList = [];
     let teamName = "Fall Ball 2026";
     let lastOutPlayer = null;
     let currentInning = 1;
-    let teamCode = localStorage.getItem("ball_team_code") || "FALL26";
+    let teamCode = localStorage.getItem("ball_team_code") || "EXPOS";
 
-    // 9 Standard Positions (6 Infield, 3 Outfield)
+    // Standard Positions
     const POSITIONS = [
       { key: "P", label: "Pitcher", type: "IF" },
       { key: "C", label: "Catcher", type: "IF" },
@@ -369,7 +466,6 @@
       }
     }
 
-    // Real-Time Cloud Sync Logic
     function connectToRoom(code) {
       if (!db) return;
       if (roomRef) roomRef.off();
@@ -381,7 +477,6 @@
 
       roomRef = db.ref("rooms/" + sanitizedCode);
 
-      // Listen for updates from other coaches
       roomRef.on("value", snapshot => {
         const data = snapshot.val();
         const indicator = document.getElementById("syncIndicator");
@@ -399,7 +494,6 @@
           lastOutPlayer = (data.lastOutPlayer === "Ashton") ? null : (data.lastOutPlayer || null);
           currentInning = data.currentInning || 1;
 
-          // Clean up any obsolete LC/RC keys or Ashton references from remote
           let remoteGrid = data.rotationState || rotationState;
           for (let i = 0; i < INNINGS; i++) {
             if (!remoteGrid[i]) remoteGrid[i] = {};
@@ -410,6 +504,9 @@
                 remoteGrid[i][p.key] = { player: "", manual: false };
               }
             });
+            if (roster.length < 9) {
+              remoteGrid[i]["C"] = { player: "", manual: false };
+            }
             delete remoteGrid[i]["LC"];
             delete remoteGrid[i]["RC"];
           }
@@ -511,6 +608,9 @@
             rotationState[i][p.key] = { player: "", manual: false };
           }
         });
+        if (roster.length < 9) {
+          rotationState[i]["C"] = { player: "", manual: false };
+        }
       }
       pushCloudUpdate();
     }
@@ -585,6 +685,8 @@
       thead.innerHTML = "";
       tbody.innerHTML = "";
 
+      const catcherDisabled = roster.length < 9;
+
       let headTr = `<tr><th style="text-align:left;">Position / Inning</th>`;
       for (let inn = 1; inn <= INNINGS; inn++) {
         const isCurrent = (inn === currentInning);
@@ -595,33 +697,44 @@
 
       POSITIONS.forEach(pos => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td class="pos-label">${pos.label} <span class="pos-type-tag ${pos.type === 'IF' ? 'type-if' : 'type-of'}">${pos.type}</span></td>`;
+        const isDisabledPos = (pos.key === "C" && catcherDisabled);
+        if (isDisabledPos) tr.className = "pos-disabled";
+
+        let labelHtml = `${pos.label} <span class="pos-type-tag ${pos.type === 'IF' ? 'type-if' : 'type-of'}">${pos.type}</span>`;
+        if (isDisabledPos) {
+          labelHtml += ` <small style="display:block; font-size:0.65rem; color:#94a3b8; font-weight:normal;">(Optional - &lt;9 Players)</small>`;
+        }
+        tr.innerHTML = `<td class="pos-label">${labelHtml}</td>`;
 
         for (let innIdx = 0; innIdx < INNINGS; innIdx++) {
           const td = document.createElement("td");
           if (innIdx + 1 === currentInning) td.className = "current-inning-col";
 
           const select = document.createElement("select");
-          if (rotationState[innIdx][pos.key].manual) select.className = "manual-set";
+          if (isDisabledPos) {
+            select.disabled = true;
+            select.innerHTML = `<option value="">-- Not Used --</option>`;
+          } else {
+            if (rotationState[innIdx][pos.key].manual) select.className = "manual-set";
+            select.innerHTML = `<option value="">-- Open --</option>` + roster.map(p => 
+              `<option value="${p}" ${rotationState[innIdx][pos.key].player === p ? 'selected' : ''}>${p}</option>`
+            ).join("");
 
-          select.innerHTML = `<option value="">-- Open --</option>` + roster.map(p => 
-            `<option value="${p}" ${rotationState[innIdx][pos.key].player === p ? 'selected' : ''}>${p}</option>`
-          ).join("");
-
-          select.onchange = (e) => {
-            const val = e.target.value;
-            if (!val) {
-              rotationState[innIdx][pos.key] = { player: "", manual: false };
-            } else {
-              POSITIONS.forEach(other => {
-                if (other.key !== pos.key && rotationState[innIdx][other.key].player === val) {
-                  rotationState[innIdx][other.key] = { player: "", manual: false };
-                }
-              });
-              rotationState[innIdx][pos.key] = { player: val, manual: true };
-            }
-            pushCloudUpdate();
-          };
+            select.onchange = (e) => {
+              const val = e.target.value;
+              if (!val) {
+                rotationState[innIdx][pos.key] = { player: "", manual: false };
+              } else {
+                POSITIONS.forEach(other => {
+                  if (other.key !== pos.key && rotationState[innIdx][other.key].player === val) {
+                    rotationState[innIdx][other.key] = { player: "", manual: false };
+                  }
+                });
+                rotationState[innIdx][pos.key] = { player: val, manual: true };
+              }
+              pushCloudUpdate();
+            };
+          }
 
           td.appendChild(select);
           tr.appendChild(td);
@@ -645,7 +758,7 @@
       tbody.innerHTML = "";
 
       roster.forEach(player => {
-        let totalIF = 0, earlyIF = 0, bench = 0;
+        let totalIF = 0, earlyIF = 0, bench = 0, ifThroughInn5 = 0;
         const posCounts = {};
 
         for (let inn = 0; inn < INNINGS; inn++) {
@@ -657,6 +770,7 @@
               if (p.type === "IF") {
                 totalIF++;
                 if (inn < 4) earlyIF++;
+                if (inn < 5) ifThroughInn5++;
               }
             }
           });
@@ -670,9 +784,13 @@
         
         POSITIONS.forEach(p => {
           if (p.type === "IF" && (posCounts[p.key] || 0) > 2) {
-            violations.push(`${p.key}: ${posCounts[p.key]}x`);
+            violations.push(`${p.key}: ${posCounts[p.key]}x (max 2)`);
           }
         });
+
+        if (ifThroughInn5 > 3) {
+          violations.push(`4th IF before Inn 6 (${ifThroughInn5}/3 max through Inn 5)`);
+        }
 
         const breakdown = Object.entries(posCounts).map(([k, c]) => `${k}:${c}`).join(" ") || "-";
         const tr = document.createElement("tr");
@@ -688,33 +806,51 @@
       });
     }
 
+    // Best-Fit Optimization Engine (Handles full 9-player & short rosters smoothly)
     function autoFillRemaining() {
-      if (roster.length < 7) { alert("Need 7+ players."); return; }
+      if (roster.length < 6) { alert("Need at least 6 players to start."); return; }
       const IF_KEYS = POSITIONS.filter(p => p.type === "IF").map(p => p.key);
-      let solved = false, best = null;
 
       let activeField = [...POSITIONS];
       if (roster.length < 9) {
-        // If 7 or 8 players, drop outfield spots starting with RF, then LF
-        activeField = POSITIONS.filter(p => !["RF", "LF"].slice(0, 9 - roster.length).includes(p.key));
+        // Catcher not used if under 9 players
+        activeField = activeField.filter(p => p.key !== "C");
+        // If 7 players, drop RF; if 6 players, drop LF too
+        if (roster.length <= 7) activeField = activeField.filter(p => p.key !== "RF");
+        if (roster.length <= 6) activeField = activeField.filter(p => p.key !== "LF");
       }
 
-      for (let attempt = 0; attempt < 800; attempt++) {
+      let bestState = null;
+      let bestPenalty = Infinity;
+      const MAX_ATTEMPTS = 1200;
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const candidate = JSON.parse(JSON.stringify(rotationState));
-        let valid = true;
-        const ifCounts = {}, earlyIf = {}, posUsage = {}, benchCounts = {};
+        let validRun = true;
+        const ifCounts = {}, earlyIf = {}, ifThrough5 = {}, posUsage = {}, benchCounts = {};
 
         roster.forEach(p => {
-          ifCounts[p] = 0; earlyIf[p] = 0; benchCounts[p] = 0; posUsage[p] = {};
+          ifCounts[p] = 0; earlyIf[p] = 0; ifThrough5[p] = 0; benchCounts[p] = 0; posUsage[p] = {};
           POSITIONS.forEach(pos => posUsage[p][pos.key] = 0);
         });
 
+        if (roster.length < 9) {
+          for (let inn = 0; inn < INNINGS; inn++) {
+            candidate[inn]["C"] = { player: "", manual: false };
+          }
+        }
+
+        // Tally manual pins
         for (let inn = 0; inn < INNINGS; inn++) {
           POSITIONS.forEach(pos => {
             const pl = candidate[inn][pos.key].player;
             if (pl && roster.includes(pl)) {
               posUsage[pl][pos.key]++;
-              if (pos.type === "IF") { ifCounts[pl]++; if (inn < 4) earlyIf[pl]++; }
+              if (pos.type === "IF") {
+                ifCounts[pl]++;
+                if (inn < 4) earlyIf[pl]++;
+                if (inn < 5) ifThrough5[pl]++;
+              }
             }
           });
         }
@@ -724,38 +860,79 @@
           const open = activeField.filter(pos => !candidate[inn][pos.key].player).sort((a,b) => a.type === "IF" ? -1 : 1);
 
           for (let pos of open) {
-            const elig = roster.filter(cand => !assigned.includes(cand) && !(pos.type === "IF" && posUsage[cand][pos.key] >= 2));
-            if (!elig.length) { valid = false; break; }
+            // Hard constraint: Cannot repeat same IF position > 2 times
+            const elig = roster.filter(cand => {
+              if (assigned.includes(cand)) return false;
+              if (pos.type === "IF" && posUsage[cand][pos.key] >= 2) return false;
+              return true;
+            });
+
+            if (!elig.length) { validRun = false; break; }
 
             elig.sort((a, b) => {
               if (pos.type === "IF") {
-                if (inn < 4 && earlyIf[a] !== earlyIf[b]) return earlyIf[a] - earlyIf[b];
-                return ifCounts[a] - ifCounts[b];
+                // Heavily penalize anyone trying to take a 4th IF in innings 1-5
+                const aOver5 = (inn < 5 && ifThrough5[a] >= 3) ? 100 : 0;
+                const bOver5 = (inn < 5 && ifThrough5[b] >= 3) ? 100 : 0;
+                if (aOver5 !== bOver5) return aOver5 - bOver5;
+
+                if (inn < 4) {
+                  const aNeedEarly = 2 - earlyIf[a];
+                  const bNeedEarly = 2 - earlyIf[b];
+                  if (aNeedEarly !== bNeedEarly) return bNeedEarly - aNeedEarly;
+                }
+                const aNeed = 3 - ifCounts[a];
+                const bNeed = 3 - ifCounts[b];
+                if (aNeed !== bNeed) return bNeed - aNeed;
+              } else {
+                return ifCounts[b] - ifCounts[a];
               }
-              return ifCounts[b] - ifCounts[a] || (Math.random() - 0.5);
+              return Math.random() - 0.5;
             });
 
             const choice = elig[0];
             candidate[inn][pos.key] = { player: choice, manual: false };
             assigned.push(choice);
             posUsage[choice][pos.key]++;
-            if (pos.type === "IF") { ifCounts[choice]++; if (inn < 4) earlyIf[choice]++; }
+            if (pos.type === "IF") {
+              ifCounts[choice]++;
+              if (inn < 4) earlyIf[choice]++;
+              if (inn < 5) ifThrough5[choice]++;
+            }
           }
-          if (!valid) break;
+          if (!validRun) break;
           roster.forEach(r => { if (!assigned.includes(r)) benchCounts[r]++; });
         }
 
-        if (valid) {
-          let meets = roster.every(r => ifCounts[r] >= 3 && earlyIf[r] >= 2 && benchCounts[r] <= 2 && IF_KEYS.every(k => posUsage[r][k] <= 2));
-          if (meets) { best = candidate; solved = true; break; }
+        if (validRun) {
+          // Calculate penalty score (0 is 100% compliant)
+          let penalty = 0;
+          roster.forEach(r => {
+            if (ifCounts[r] < 3) penalty += (3 - ifCounts[r]) * 25;
+            if (earlyIf[r] < 2) penalty += (2 - earlyIf[r]) * 20;
+            if (ifThrough5[r] > 3) penalty += (ifThrough5[r] - 3) * 30;
+            if (benchCounts[r] > 2) penalty += (benchCounts[r] - 2) * 50;
+            IF_KEYS.forEach(k => {
+              if (posUsage[r][k] > 2) penalty += (posUsage[r][k] - 2) * 100;
+            });
+          });
+
+          if (penalty < bestPenalty) {
+            bestPenalty = penalty;
+            bestState = candidate;
+            if (bestPenalty === 0) break; // Found perfect rotation
+          }
         }
       }
 
-      if (solved && best) {
-        rotationState = best;
+      if (bestState) {
+        rotationState = bestState;
         pushCloudUpdate();
+        if (bestPenalty > 0 && roster.length < 9) {
+          alert(`Auto-filled the best possible configuration for ${roster.length} players. Because catcher was omitted, some infield time is maximized to the closest mathematical limit.`);
+        }
       } else {
-        alert("Constraints could not be satisfied. Try unlocking a few pinned positions.");
+        alert("Could not satisfy rotation constraints with current manual picks. Please clear a few manual selections and try again.");
       }
     }
 
